@@ -8,6 +8,8 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 import arviz as az
+from sklearn.decomposition import PCA
+
 
 
 # Lasso regression minimizes the residual sum of squares (RSS), which assumes the errors (residuals) follow a Gaussian (normal) distribution. This assumption often holds well when:
@@ -17,7 +19,7 @@ import arviz as az
 # Better predictions.
 # A model where the coefficients more accurately reflect the relationships between features and the target.
 
-def preprocess_data(X:pd.DataFrame):
+def preprocess_data(X:pd.DataFrame, use_pca:bool=False, n_components:int=10):
     # Identify numeric and categorical columns
     numeric_cols = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_cols = X.select_dtypes(include=['object']).columns
@@ -41,18 +43,31 @@ def preprocess_data(X:pd.DataFrame):
         transformers=[
             ('num', numeric_pipeline, numeric_cols),
             ('cat', categorical_pipeline, categorical_cols)
-        ]
+        ],
+        # remainder='passthrough'  # Keep numeric columns as they are (untransformed)
     )
-
     # Fit and transform the data
     X_transformed = preprocessor.fit_transform(X)
 
     # Get feature names
-    categorical_features = preprocessor.named_transformers_['cat']['onehot'].get_feature_names_out(categorical_cols)
-    processed_features = list(numeric_cols) + list(categorical_features)
+    if use_pca:
+        # Apply PCA to reduce everything to 10 components
+        pca = PCA(n_components=n_components)
+        X_pca = pca.fit_transform(X_transformed)
 
-    # Convert transformed data to a DataFrame
-    X_df = pd.DataFrame(X_transformed, columns=processed_features)
+        # Create column names for PCA components
+        pca_features = [f"PCA_Component_{i+1}" for i in range(n_components)]
+
+        # Convert PCA-transformed data to a DataFrame
+        X_df = pd.DataFrame(X_pca, columns=pca_features)
+
+    else:
+        categorical_features = preprocessor.named_transformers_['cat']['onehot'].get_feature_names_out(categorical_cols)
+        processed_features = list(numeric_cols) + list(categorical_features)
+
+        # Convert transformed data to a DataFrame
+        X_df = pd.DataFrame(X_transformed, columns=processed_features)
+
     return X_df
 
 
@@ -92,11 +107,18 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
     # Define the Bayesian model
     with pm.Model() as housing_model:
         # Priors for coefficients
-        # coefficients = pm.Normal('coefficients', mu=0, sigma=10, shape=X_train.shape[1])
-        # sigma = 20
-        coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
+                
+        ### LAPLACE FOR PRIORS
         # coefficients = pm.Laplace('coefficients', mu=0, b=1, shape=X_train.shape[1])
+
+        ### NORMAL FOR PRIORS
+        coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
         intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
+
+        ### UNIFORM FOR PRIORS
+        # coefficients = pm.Uniform('coefficients', lower=-1e5, upper=1e5, shape=X_train.shape[1])
+        # intercept = pm.Uniform('Intercept', lower=-1e5, upper=1e5)
+
 
         # Define the linear model
         mu = pm.math.dot(X_train.values, coefficients) + intercept
@@ -110,12 +132,15 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         # sigma = pm.Exponential('sigma', lam=pm.math.exp(log_sigma))  # Exponential to keep sigma positive
 
 
-        # # Likelihood function
-        sigma = pm.HalfNormal('sigma', sigma=sigma)   
+        # # Likelihood function        
+        sigma = pm.HalfNormal('sigma', sigma=1)   
         # #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
-        price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
-        # nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
-        # price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
+        ### UNIFORM FOR LIKELIHOOD
+        # price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
+
+        ### STUDENT T FOR LIKELIHOOD - works better with outliers
+        nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
+        price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
 
 
         # Sampling using MCMC
@@ -131,7 +156,7 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
 
     # Summarize posterior distributions
     summary = pm.summary(trace)
-    return summary, trace
+    return summary, trace, housing_model
 
 
 # use the coefficients to determine the most important features (removing the unnecessary features)
