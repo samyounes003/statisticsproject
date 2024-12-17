@@ -93,17 +93,30 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
     with pm.Model() as housing_model:
         # Priors for coefficients
         # coefficients = pm.Normal('coefficients', mu=0, sigma=10, shape=X_train.shape[1])
-        sigma = 20
+        # sigma = 20
         coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
+        # coefficients = pm.Laplace('coefficients', mu=0, b=1, shape=X_train.shape[1])
         intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
 
         # Define the linear model
         mu = pm.math.dot(X_train.values, coefficients) + intercept
 
-        # Likelihood function
+
+        # log_sigma = pm.Deterministic(
+        #     'log_sigma', 
+        #     pm.math.dot(X_train.values, pm.Normal('sigma_coefficients', mu=0, sigma=10, shape=X_train.shape[1])) + 
+        #     pm.Normal('sigma_intercept', mu=0, sigma=10)
+        # )
+        # sigma = pm.Exponential('sigma', lam=pm.math.exp(log_sigma))  # Exponential to keep sigma positive
+
+
+        # # Likelihood function
         sigma = pm.HalfNormal('sigma', sigma=sigma)   
-        #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
+        # #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
         price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
+        # nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
+        # price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
+
 
         # Sampling using MCMC
         # Identifies all the stochastic variables (like coefficients, intercept, sigma) and the likelihood (price_obs) in the model.
