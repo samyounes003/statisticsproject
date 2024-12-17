@@ -88,19 +88,20 @@ def find_best_features_with_lasso(X_df:pd.DataFrame, y_df:pd.DataFrame):
 #                                 │
 #                            Observed Data: y_train
 
-def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame):
+def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame, sigma:int=10):
     # Define the Bayesian model
     with pm.Model() as housing_model:
         # Priors for coefficients
         # coefficients = pm.Normal('coefficients', mu=0, sigma=10, shape=X_train.shape[1])
-        coefficients = pm.Normal('coefficients', mu=0, sigma=10, shape=X_train.shape[1])
-        intercept = pm.Normal('Intercept', mu=0, sigma=10)
+        sigma = 20
+        coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
+        intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
 
         # Define the linear model
         mu = pm.math.dot(X_train.values, coefficients) + intercept
 
         # Likelihood function
-        sigma = pm.HalfNormal('sigma', sigma=10)   
+        sigma = pm.HalfNormal('sigma', sigma=sigma)   
         #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
         price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
 
