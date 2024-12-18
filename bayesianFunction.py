@@ -146,11 +146,11 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         sigma = pm.HalfNormal('sigma', sigma=1)   
         # #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
         ### UNIFORM FOR LIKELIHOOD
-        price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
+        # price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
 
         # ### STUDENT T FOR LIKELIHOOD - works better with outliers
-        # nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
-        # price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
+        nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
+        price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
 
 
         # Sampling using MCMC
