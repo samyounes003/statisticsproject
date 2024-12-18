@@ -11,6 +11,14 @@ import arviz as az
 from sklearn.decomposition import PCA
 
 
+def df_basic_process(data:pd.DataFrame):
+    data = data[(data.priceCash > 300000) & (data.priceCash < 20000000)] # filter out really low and high prices
+    data['priceCash'] = data.priceCash / 7.45
+    important_features = ['priceCash', 'coordinates.lat', 'coordinates.lon', 'energyLabel', 'housingArea', 'lotArea', 'monthlyExpense', 'numberOfRooms', 'perAreaPrice', 'timeOnMarket.current.days', 'yearBuilt']
+    data = data[[i for i in data.columns if i in important_features]]
+    return data
+
+
 
 # Lasso regression minimizes the residual sum of squares (RSS), which assumes the errors (residuals) follow a Gaussian (normal) distribution. This assumption often holds well when:
 # The target variable itself (e.g., housing prices) is normally distributed.
@@ -19,13 +27,10 @@ from sklearn.decomposition import PCA
 # Better predictions.
 # A model where the coefficients more accurately reflect the relationships between features and the target.
 
-def preprocess_data(X:pd.DataFrame, use_pca:bool=False, n_components:int=10):
+def preprocess_data(X: pd.DataFrame, use_pca: bool = False, n_components: int = 10):
     # Identify numeric and categorical columns
     numeric_cols = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_cols = X.select_dtypes(include=['object']).columns
-
-    # print("Numeric Columns:", numeric_cols)
-    # print("Categorical Columns:", categorical_cols)
 
     # Define preprocessing pipelines
     numeric_pipeline = Pipeline(steps=[
@@ -43,15 +48,14 @@ def preprocess_data(X:pd.DataFrame, use_pca:bool=False, n_components:int=10):
         transformers=[
             ('num', numeric_pipeline, numeric_cols),
             ('cat', categorical_pipeline, categorical_cols)
-        ],
-        # remainder='passthrough'  # Keep numeric columns as they are (untransformed)
+        ]
     )
+
     # Fit and transform the data
     X_transformed = preprocessor.fit_transform(X)
 
-    # Get feature names
     if use_pca:
-        # Apply PCA to reduce everything to 10 components
+        # Apply PCA to reduce dimensions
         pca = PCA(n_components=n_components)
         X_pca = pca.fit_transform(X_transformed)
 
@@ -60,10 +64,16 @@ def preprocess_data(X:pd.DataFrame, use_pca:bool=False, n_components:int=10):
 
         # Convert PCA-transformed data to a DataFrame
         X_df = pd.DataFrame(X_pca, columns=pca_features)
-
     else:
+        # Dynamically extract feature names after transformation
+        numeric_features = list(numeric_cols)  # Numeric features remain as is
         categorical_features = preprocessor.named_transformers_['cat']['onehot'].get_feature_names_out(categorical_cols)
-        processed_features = list(numeric_cols) + list(categorical_features)
+
+        # Combine all features
+        processed_features = numeric_features + list(categorical_features)
+
+        # Truncate features dynamically to align with X_transformed
+        processed_features = processed_features[:X_transformed.shape[1]]
 
         # Convert transformed data to a DataFrame
         X_df = pd.DataFrame(X_transformed, columns=processed_features)
@@ -136,11 +146,11 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         sigma = pm.HalfNormal('sigma', sigma=1)   
         # #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
         ### UNIFORM FOR LIKELIHOOD
-        # price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
+        price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
 
-        ### STUDENT T FOR LIKELIHOOD - works better with outliers
-        nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
-        price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
+        # ### STUDENT T FOR LIKELIHOOD - works better with outliers
+        # nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
+        # price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
 
 
         # Sampling using MCMC
