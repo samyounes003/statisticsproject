@@ -121,9 +121,13 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         ### LAPLACE FOR PRIORS
         # coefficients = pm.Laplace('coefficients', mu=0, b=1, shape=X_train.shape[1])
 
-        ### NORMAL FOR PRIORS
+        # ### NORMAL FOR PRIORS
         coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
         intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
+
+        ### FLAT FOR PRIORS (jeffey's prior)
+        # coefficients = pm.Flat('coefficients', shape=X_train.shape[1])
+        # intercept = pm.Flat('Intercept')
 
         ### UNIFORM FOR PRIORS
         # coefficients = pm.Uniform('coefficients', lower=-1e5, upper=1e5, shape=X_train.shape[1])
