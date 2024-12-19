@@ -9,6 +9,19 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 import arviz as az
 from sklearn.decomposition import PCA
+import json
+
+
+def get_relative_error(y_true:list, y_pred:list):
+    # Calculate relative error for each observation
+    relative_errors = np.abs(y_true - y_pred) / np.abs(y_true)
+
+    # Calculate mean relative error (in percentage)
+    mean_relative_error = np.mean(relative_errors) * 100
+
+    # print(f"Mean Relative Error: {mean_relative_error:.2f}%")
+    return round(mean_relative_error, 2)
+
 
 
 def df_basic_process(data:pd.DataFrame):
@@ -113,16 +126,25 @@ def find_best_features_with_lasso(X_df:pd.DataFrame, y_df:pd.DataFrame):
 #                                 │
 #                            Observed Data: y_train
 
-def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame, sigma:int=10):
-    # Define the Bayesian model
+def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame, sigma:int=10, priors_file:str="priors_info.json"):
+    with open(priors_file, "r") as file:
+        priors_info = json.load(file)
+
+    # Define the Bayesian model    
     with pm.Model() as housing_model:
         # Priors for coefficients
-                
+        coefficients = pm.Normal(
+            'coefficients',
+            mu=[priors_info[feature]["mean"] for feature in X_train.columns],
+            sigma=[priors_info[feature]["std"] for feature in X_train.columns],
+            shape=X_train.shape[1]
+        )
+
         ### LAPLACE FOR PRIORS
         # coefficients = pm.Laplace('coefficients', mu=0, b=1, shape=X_train.shape[1])
 
         # ### NORMAL FOR PRIORS
-        coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
+        # coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
         intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
 
         ### FLAT FOR PRIORS (jeffey's prior)
@@ -149,12 +171,13 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         # # Likelihood function        
         sigma = pm.HalfNormal('sigma', sigma=1)   
         # #"Given the parameters μ and σ, how likely are the observed values y train to occur?"  
-        ### UNIFORM FOR LIKELIHOOD
-        # price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
+        
+        ### NORMAL FOR LIKELIHOOD
+        price_obs = pm.Normal('Price', mu=mu, sigma=sigma, observed=y_train.values) # The observed=y_train.values part in price_obs tells PyMC: These are the actual observed values for the target variable.
 
         # ### STUDENT T FOR LIKELIHOOD - works better with outliers
-        nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
-        price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
+        # nu = pm.Exponential('nu', 1/30)  # Degrees of freedom for heavy tails
+        # price_obs = pm.StudentT('Price', mu=mu, sigma=sigma, nu=nu, observed=y_train)
 
 
         # Sampling using MCMC
@@ -166,11 +189,18 @@ def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFra
         # Priors: Any random variable (e.g., pm.Normal, pm.HalfNormal) defined inside the pm.Model() context is recognized as a prior.
         # Likelihood: Any variable defined with observed=... is treated as the likelihood and connects the observed data to the priors.
         # Relationships: Deterministic relationships (like mu = dot(...) + intercept) are automatically included in the model graph.        
+        
+        # NUTS
         trace = pm.sample(1000, tune=1000, random_seed=42, cores=1)
+        
+        # Use Metropolis-Hastings as the sampling method
+        # step = pm.Metropolis()  # Define Metropolis step
+        # trace = pm.sample(1000, tune=1000, step=step, random_seed=42, cores=1)        
 
     # Summarize posterior distributions
     summary = pm.summary(trace)
     return summary, trace, housing_model
+
 
 
 # use the coefficients to determine the most important features (removing the unnecessary features)
