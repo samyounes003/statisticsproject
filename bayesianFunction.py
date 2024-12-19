@@ -12,15 +12,11 @@ from sklearn.decomposition import PCA
 import json
 
 
-def get_relative_error(y_true:list, y_pred:list):
-    # Calculate relative error for each observation
-    relative_errors = np.abs(y_true - y_pred) / np.abs(y_true)
-
-    # Calculate mean relative error (in percentage)
-    mean_relative_error = np.mean(relative_errors) * 100
-
-    # print(f"Mean Relative Error: {mean_relative_error:.2f}%")
-    return round(mean_relative_error, 2)
+def get_squared_relative_error(y_true:list, rmse:int):
+    # Calculate squared relative error for each observation
+    avg_sale_price = np.array(list(y_true)).mean()
+    relative_error = (rmse / avg_sale_price) * 100
+    return relative_error
 
 
 
