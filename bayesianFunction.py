@@ -9,6 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 import arviz as az
 from sklearn.decomposition import PCA
+import json
 
 
 def df_basic_process(data:pd.DataFrame):
@@ -113,16 +114,25 @@ def find_best_features_with_lasso(X_df:pd.DataFrame, y_df:pd.DataFrame):
 #                                 │
 #                            Observed Data: y_train
 
-def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame, sigma:int=10):
-    # Define the Bayesian model
+def get_bayesian_posterior_distribution(X_train:pd.DataFrame, y_train:pd.DataFrame, sigma:int=10, priors_file:str="priors_info.json"):
+    with open(priors_file, "r") as file:
+        priors_info = json.load(file)
+
+    # Define the Bayesian model    
     with pm.Model() as housing_model:
         # Priors for coefficients
-                
+        coefficients = pm.Normal(
+            'coefficients',
+            mu=[priors_info[feature]["mean"] for feature in X_train.columns],
+            sigma=[priors_info[feature]["std"] for feature in X_train.columns],
+            shape=X_train.shape[1]
+        )
+                        
         ### LAPLACE FOR PRIORS
         # coefficients = pm.Laplace('coefficients', mu=0, b=1, shape=X_train.shape[1])
 
         # ### NORMAL FOR PRIORS
-        coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
+        # coefficients = pm.Normal('coefficients', mu=0, sigma=sigma, shape=X_train.shape[1])
         intercept = pm.Normal('Intercept', mu=0, sigma=sigma)
 
         ### FLAT FOR PRIORS (jeffey's prior)
